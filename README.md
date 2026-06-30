@@ -1,1 +1,0 @@
-# IDX-Exchange-Data-Analyst-Project
