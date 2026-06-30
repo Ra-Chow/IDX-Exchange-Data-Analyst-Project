@@ -1,0 +1,51 @@
+import pandas as pd
+import glob
+
+# Define the file path patterns for the listings and sold CSV files.
+filePathPatternListings = "/Users/raineechow/Documents/IDX Exchange/csv/CRMLSListing*.csv"
+filePathPatternSold = "/Users/raineechow/Documents/IDX Exchange/csv/CRMLSSold*.csv"
+
+# --------------------------------------------------
+# PART 1: COMBINE AND FILTER RESIDENTIAL LISTINGS
+# --------------------------------------------------
+
+# Read and combine all the listing CSV files into a single DataFrame.
+print("Processing listing files...")
+listingFiles = sorted(glob.glob(filePathPatternListings))
+combinedListings = pd.concat([pd.read_csv(f) for f in listingFiles], ignore_index=True)
+initialListingsCount = len(combinedListings)
+
+# Filtering out only "Residential" property types from the combined listings.
+filteredListings = combinedListings[combinedListings['PropertyType'] == 'Residential']
+finalListingsCount = len(filteredListings)
+
+# Save the filtered listings to a new CSV file.
+filteredListings.to_csv("week1_residential_listings.csv", index=False)
+
+# --------------------------------------------------
+# PART 2: COMBINE AND FILTER SOLD PROPERTIES
+# --------------------------------------------------
+
+# Read and combine all the sold CSV files into a single DataFrame.
+print("Processing sold files...")
+soldFiles = sorted(glob.glob(filePathPatternSold))
+
+# Concatenate the sold CSV files into a single DataFrame.
+combinedSold = [pd.read_csv(f) for f in soldFiles]
+combinedSoldDF = pd.concat(combinedSold, ignore_index=True)
+
+# Filtering out only "Residential" property types from the combined sold properties.
+filteredSold = combinedSoldDF[combinedSoldDF['PropertyType'] == 'Residential']
+finalSoldCount = len(filteredSold)
+
+# Save the filtered sold properties to a new CSV file.
+filteredSold.to_csv("week1_residential_sold.csv", index=False)
+# --------------------------------------------------
+# PART 3: PRINT SUMMARY OF RESULTS
+# --------------------------------------------------
+
+print("Summary of Results:")
+print(f"Initial number of listings: {initialListingsCount}")
+print(f"Number of residential listings after filtering: {finalListingsCount}")
+print(f"Initial number of sold properties: {len(combinedSoldDF)}")
+print(f"Number of residential sold properties after filtering: {finalSoldCount}")
