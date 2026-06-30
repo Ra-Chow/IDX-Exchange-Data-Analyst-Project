@@ -1,13 +1,12 @@
 # IDX Exchange: Data Analyst Internship Project
 
+Welcome to my repository for the **IDX Exchange Data Analyst Internship Program**. This repository houses a progressive data engineering and analytics pipeline designed to transform raw MLS dataset records into polished housing market intelligence.
+
 ## Contact & Connect
 * **Author**: Rainee Chow (Team Lead)
 * **LinkedIn:** [www.linkedin.com/in/rainee-c]
 * **Handshake:** [https://uic.joinhandshake.com/profiles/hbfm5d]
 * **Tableau Public**: [https://public.tableau.com/app/profile/rainee.chow/vizzes]
-
-Welcome to my repository for the **IDX Exchange Data Analyst Internship Program**. This repository houses a progressive data engineering and analytics pipeline designed to transform raw MLS dataset records into polished housing market intelligence.
-
 ---
 
 ## Project Summary
