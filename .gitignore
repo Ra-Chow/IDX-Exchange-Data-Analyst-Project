@@ -1,0 +1,29 @@
+# =======================================================
+# IDX Exchange Internship - Data Security Shield
+# =======================================================
+
+# 1. Ignore the entire folder where raw CSVs are stored
+csv/
+
+# 2. Ignore the specific output tables created in Week 1
+week1_residential_listings.csv
+week1_residential_sold.csv
+
+# 3. Catch-all safety: Ignore ANY file ending in .csv in this project
+*.csv
+
+# 4. Ignore your local virtual environment sandbox folder
+.venv/
+.DS_Store
+
+# Block data folders
+csv/
+*.csv
+
+# Block large SQL dumps
+sql/
+*.sql
+
+# Block environment variables and system files
+.venv/
+.DS_Store
