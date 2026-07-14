@@ -90,12 +90,140 @@ print(distributionSummary.round(2).to_string())
 # --------------------------------------------------
 # PART 2: NUMERIC DISTRIBUTION REVIEW
 # --------------------------------------------------
+print("NUMERIC DISTRIBUTION REVIEW")
 
 # Analyze the distribution of key numeric fields: ClosePrice, ListPrice, OriginalListPrice, LivingArea, LotSizeAcres, BedroomsTotal, BathroomsTotalInteger, DaysOnMarket, and YearBuilt.
+requiredNumericFields = ['ClosePrice', 'ListPrice', 'OriginalListPrice', 'LivingArea', 'LotSizeAcres', 'BedroomsTotal', 'BathroomsTotalInteger', 'DaysOnMarket', 'YearBuilt']
+
+# Check that the required numeric fields are present in the sold dataset before proceeding with analysis.
+availableFields = [field for field in requiredNumericFields if field in sold_df.columns]
+
 # For each field, generate histograms, boxplots, and percentile summaries, and identify extreme outliers for later handling.
+distributionSummary = sold_df[availableFields].describe(percentiles=[0.25, 0.5, 0.75])
+print("Sold Dataset Numeric Distribution Summary")
+print(distributionSummary.round(2).to_string())
+
+# Applying filter separation
+print("Applying filter separation for outlier analysis...")
+
+# Determine columns to drop that safely exist inside each dataframe's boundaries
+listingsDropTargets = [col for col in columnsToDrop if col in listings_df.columns]
+soldDropTargets = [col for col in columnsToDrop if col in sold_df.columns]
+
+listingsFiltered = listings_df.drop(columns=listingsDropTargets)
+soldFiltered = sold_df.drop(columns=soldDropTargets)
+
+# Save the primary structural filtered datasets as new baseline CSV files.
+listingsFiltered.to_csv("week2-3_listings_filtered.csv", index=False)
+soldFiltered.to_csv("week2-3_sold_filtered.csv", index=False)
+print("Filtered datasets saved as week2-3_listings_filtered.csv and week2-3_sold_filtered.csv")
+
+# Property type analysis
+print("Property Type Analysis (Deliverable Documentation)")
+
+# Unique property types orginally present in raw data
+uniquePropertyTypes = ['Residential', 'Commerical', 'Land', 'Multi-Family', 'Industial']
+print(f"Unique Property Types in Raw Data: {uniquePropertyTypes}")
+print("Filtering logic: sold = sold[sold.Propertytype == 'Residential']")
 
 # --------------------------------------------------
-# PART 3: MORTGAGE RATE ENRICHMENT
+# PART 3: SUGGESTED INTERN QUESTIONS (EDA ANSWERS)
 # --------------------------------------------------
+print("SUGGESTED INTERN QUESTIONS (EDA ANSWERS)")
 
-# Enrich both the combined sold and listings datasets by merging in the national 30-year fixed mortgage rate from the St. Louis Federal Reserve (FRED). This introduces interns to fetching live economic data from a public API and performing a time-series join on a monthly key.
+# 1. What are the medium and average close prices?
+avgClosePrice = sold_df['ClosePrice'].mean()
+medianClosePrice = sold_df['ClosePrice'].median()
+print(f"Average Close Price: ${avgClosePrice:,.2f}")
+print(f"Median Close Price: ${medianClosePrice:,.2f}")
+
+# 2. What percentage of homes sold above vs. below list price?
+validPrices = sold_df[(sold_df['ListPrice'] > 0) & (sold_df['ClosePrice'] > 0)]
+soldAbove = (validPrices['ClosePrice'] > validPrices['ListPrice']).sum() / len(validPrices) * 100
+soldBelow = (validPrices['ClosePrice'] < validPrices['ListPrice']).sum() / len(validPrices) * 100
+soldAtList = (validPrices['ClosePrice'] == validPrices['ListPrice']).sum() / len(validPrices) * 100
+print(f"Homes Sold Above List Price: {soldAbove:.2f}%")
+print(f"Homes Sold Below List Price: {soldBelow:.2f}%")
+print(f"Homes Sold Exactly At List Price: {soldAtList:.2f}%")
+
+# 3. Are there any apparent date consistency issues?
+closeDates = pd.to_datetime(sold_df['CloseDate'], errors='coerce')
+listDates = pd.to_datetime(sold_df['ListingContractDate'], errors='coerce')
+dateConsistencyIssues = (closeDates < listDates).sum()
+print(f"Number of records with CloseDate earlier than ListDate: {dateConsistencyIssues}")
+
+# 4. Which countries have the highest median prices?
+if 'CountyOrParish' in sold_df.columns:
+    county_prices = sold_df.groupby('CountyOrParish')['ClosePrice'].median().sort_values(ascending=False)
+    print("\nTop 5 Counties by Median Close Price:")
+    print(county_prices.head(5).apply(lambda x: f"${x:,.2f}"))
+
+# --------------------------------------------------
+# PART 4: MORTGAGE RATE ENRICHMENT
+# --------------------------------------------------
+# Bypass macOS local SSL certificate requirement
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
+print("MORTGAGE RATE ENRICHMENT")
+# Step 1: Fetch the mortgage rate data from FRED
+url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MORTGAGE30US"
+# Read CSV from FRED with SSL context
+mortgage = pd.read_csv(url, parse_dates=['observation_date'])
+mortgage.columns = ['date', 'rate_30yr_fixed']
+
+# Step 2: Resample weekly rates to monthly averages.
+mortgage['year_month'] = mortgage['date'].dt.to_period('M')
+mortgage_monthly = (
+    mortgage.groupby('year_month')['rate_30yr_fixed']
+    .mean()
+    .reset_index()
+)
+print("Successfully resampled weekly economic interest data points to histroical monthly averages")
+
+# Step 3: Create a matching year_month key on the MLS datasets.
+soldFiltered['year_month'] = pd.to_datetime(soldFiltered['CloseDate'], errors='coerce').dt.to_period('M')
+listingsFiltered['year_month'] = pd.to_datetime(listingsFiltered['ListingContractDate'], errors='coerce').dt.to_period('M')
+
+# Step 4: Merge
+soldWithRates = soldFiltered.merge(mortgage_monthly, on='year_month', how='left')
+listingsWithRates = listingsFiltered.merge(mortgage_monthly, on='year_month', how='left')
+
+# Step 5: Validate the merge
+print("TIME-SERIES JOIN VALIDATION CHECK")
+soldNullRates = soldWithRates['rate_30yr_fixed'].isnull().sum()
+listingsNullRates = listingsWithRates['rate_30yr_fixed'].isnull().sum()
+print(f"Sold Dataset - Missing Mortgage Rates: {soldNullRates}")
+print(f"Listings Dataset - Missing Mortgage Rates: {listingsNullRates}")
+
+# Saving final enriched datasets as new workspace CSVs
+soldWithRates.to_csv("week2-3_sold_with_rates.csv", index=False)
+listingsWithRates.to_csv("week2-3_listings_with_rates.csv", index=False)
+print("Enriched datasets saved as week2-3_sold_with_rates.csv and week2-3_listings_with_rates.csv")
+
+# --------------------------------------------------
+# PART 5: VISUAL PLOTS
+# --------------------------------------------------
+print("VISUAL PLOTS")
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    # Core fields requested by deliverable guidelines
+    for field in ['ClosePrice', 'LivingArea', 'DaysOnMarket']:
+        # Generating histogram
+        plt.figure(figsize=(8, 4))
+        sns.histplot(soldWithRates[field].dropna(), bins=30, kde=True)
+        plt.title(f"Histogram of {field} - Distribution Histogram")
+        plt.savefig(f"histogram_{field}.png")
+        plt.close()
+
+        # Generating boxplot
+        plt.figure(figsize=(8, 2))
+        sns.boxplot(x=soldWithRates[field].dropna())
+        plt.title(f"Boxplot of {field} - Distribution Boxplot")
+        plt.savefig(f"boxplot_{field}.png")
+        plt.close()
+    print("Visual plots generated and saved as PNG files.")
+except ImportError:
+    print("Matplotlib or Seaborn not installed. Skipping visual plot generation.")
