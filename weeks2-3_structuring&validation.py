@@ -60,32 +60,34 @@ soldNullSummary.to_csv("sold_null_summary.csv")
 # 3d. Decide which columns to drop vs. retain (keep core fields even if partially missing)
 print("DROPPED VS. RETAINED COLUMNS")
 
-# 3da. Define a list of high-missing columnns that are too valuable to drop.
+# 3da. Define a list of high-missing columns that are too valuable to drop.
 criticalMarketDrivers = ['WaterfrontYN', 'BasementYN', 'PoolFeatures', 'ViewYN']
+
+# 3db. Evaluate drop targets independently for listings vs sold datasets to prevent premature data loss
+listingsHighMissing = listingsNullSummary[listingsNullSummary['Null Percentage'] > 90.0].index.tolist()
+listingsDropTargets = [col for col in listingsHighMissing if col not in criticalMarketDrivers]
+
 highMissingColumnNames = soldNullSummary[soldNullSummary['Null Percentage'] > 90.0].index.tolist()
+soldDropTargets = [col for col in highMissingColumnNames if col not in criticalMarketDrivers]
 
-columnsToDrop = []
-columnsToRetain = []
+# 3dc. Print the lists of columns to drop for auditing purposes.
+print(f"Listings Columns to Drop: {listingsDropTargets}")
+print(f"Sold Columns to Drop: {soldDropTargets}")
 
-# 3db. Iterate through the high-missing columns to decide which to drop vs. retain based on whether they are critical market drivers or not.
-for col in highMissingColumnNames:
-    # 3db-1. If the column is a known real estate driver, defined by the list criticalMarketDrivers, the 90% rules does not apply and the column is retained.
-    if col in criticalMarketDrivers:
-        columnsToRetain.append(col)
-    # 3db-2. If the column is not a known real estate driver, it is dropped from the dataset.
-    else:
-        columnsToDrop.append(col)
+# Apply drops safely to their respective datasets
+listingsFiltered = listings_df.drop(columns=[col for col in listingsDropTargets if col in listings_df.columns])
+soldFiltered = sold_df.drop(columns=[col for col in soldDropTargets if col in sold_df.columns])
 
-# 3dc. Print the lists of columns to drop and retain for auditing purposes.
-print(f"Columns to Drop: {columnsToDrop}")
-print(f"Columns to Retain: {columnsToRetain}")
+# Save the primary structural filtered datasets as new baseline CSV files.
+listingsFiltered.to_csv("week2-3_listings_filtered.csv", index=False)
+soldFiltered.to_csv("week2-3_sold_filtered.csv", index=False)
+print("Filtered datasets saved as week2-3_listings_filtered.csv and week2-3_sold_filtered.csv")
 
-# 4. Separate market analysis fields from metadata fields.
-targetNumericFields = ['ClosePrice', 'LivingArea', 'DaysOnMarket']
-distributionSummary = sold_df[targetNumericFields].describe()
-# 4a. Log results.
-print("MARKET FIELDS NUMERIC DISTRIBUTION SUMMARY")
-print(distributionSummary.round(2).to_string())
+# Property type analysis documentation string
+print("Property Type Analysis (Deliverable Documentation)")
+uniquePropertyTypes = ['Residential', 'Commerical', 'Land', 'Multi-Family', 'Industial']
+print(f"Unique Property Types in Raw Data: {uniquePropertyTypes}")
+print("Filtering logic: sold = sold[sold['PropertyType'] == 'Residential']")
 
 # --------------------------------------------------
 # PART 2: NUMERIC DISTRIBUTION REVIEW
@@ -96,49 +98,26 @@ print("NUMERIC DISTRIBUTION REVIEW")
 requiredNumericFields = ['ClosePrice', 'ListPrice', 'OriginalListPrice', 'LivingArea', 'LotSizeAcres', 'BedroomsTotal', 'BathroomsTotalInteger', 'DaysOnMarket', 'YearBuilt']
 
 # Check that the required numeric fields are present in the sold dataset before proceeding with analysis.
-availableFields = [field for field in requiredNumericFields if field in sold_df.columns]
+availableFields = [field for field in requiredNumericFields if field in soldFiltered.columns]
 
-# For each field, generate histograms, boxplots, and percentile summaries, and identify extreme outliers for later handling.
-distributionSummary = sold_df[availableFields].describe(percentiles=[0.25, 0.5, 0.75])
+# For each field, generate percentile summaries including extreme tails to satisfy handbook criteria.
+distributionSummary = soldFiltered[availableFields].describe(percentiles=[0.05, 0.25, 0.5, 0.75, 0.95])
 print("Sold Dataset Numeric Distribution Summary")
 print(distributionSummary.round(2).to_string())
-
-# Applying filter separation
-print("Applying filter separation for outlier analysis...")
-
-# Determine columns to drop that safely exist inside each dataframe's boundaries
-listingsDropTargets = [col for col in columnsToDrop if col in listings_df.columns]
-soldDropTargets = [col for col in columnsToDrop if col in sold_df.columns]
-
-listingsFiltered = listings_df.drop(columns=listingsDropTargets)
-soldFiltered = sold_df.drop(columns=soldDropTargets)
-
-# Save the primary structural filtered datasets as new baseline CSV files.
-listingsFiltered.to_csv("week2-3_listings_filtered.csv", index=False)
-soldFiltered.to_csv("week2-3_sold_filtered.csv", index=False)
-print("Filtered datasets saved as week2-3_listings_filtered.csv and week2-3_sold_filtered.csv")
-
-# Property type analysis
-print("Property Type Analysis (Deliverable Documentation)")
-
-# Unique property types orginally present in raw data
-uniquePropertyTypes = ['Residential', 'Commerical', 'Land', 'Multi-Family', 'Industial']
-print(f"Unique Property Types in Raw Data: {uniquePropertyTypes}")
-print("Filtering logic: sold = sold[sold.Propertytype == 'Residential']")
 
 # --------------------------------------------------
 # PART 3: SUGGESTED INTERN QUESTIONS (EDA ANSWERS)
 # --------------------------------------------------
 print("SUGGESTED INTERN QUESTIONS (EDA ANSWERS)")
 
-# 1. What are the medium and average close prices?
-avgClosePrice = sold_df['ClosePrice'].mean()
-medianClosePrice = sold_df['ClosePrice'].median()
+# 1. What are the median and average close prices calculated from the clean baseline?
+avgClosePrice = soldFiltered['ClosePrice'].mean()
+medianClosePrice = soldFiltered['ClosePrice'].median()
 print(f"Average Close Price: ${avgClosePrice:,.2f}")
 print(f"Median Close Price: ${medianClosePrice:,.2f}")
 
 # 2. What percentage of homes sold above vs. below list price?
-validPrices = sold_df[(sold_df['ListPrice'] > 0) & (sold_df['ClosePrice'] > 0)]
+validPrices = soldFiltered[(soldFiltered['ListPrice'] > 0) & (soldFiltered['ClosePrice'] > 0)]
 soldAbove = (validPrices['ClosePrice'] > validPrices['ListPrice']).sum() / len(validPrices) * 100
 soldBelow = (validPrices['ClosePrice'] < validPrices['ListPrice']).sum() / len(validPrices) * 100
 soldAtList = (validPrices['ClosePrice'] == validPrices['ListPrice']).sum() / len(validPrices) * 100
@@ -147,14 +126,14 @@ print(f"Homes Sold Below List Price: {soldBelow:.2f}%")
 print(f"Homes Sold Exactly At List Price: {soldAtList:.2f}%")
 
 # 3. Are there any apparent date consistency issues?
-closeDates = pd.to_datetime(sold_df['CloseDate'], errors='coerce')
-listDates = pd.to_datetime(sold_df['ListingContractDate'], errors='coerce')
+closeDates = pd.to_datetime(soldFiltered['CloseDate'], errors='coerce')
+listDates = pd.to_datetime(soldFiltered['ListingContractDate'], errors='coerce')
 dateConsistencyIssues = (closeDates < listDates).sum()
 print(f"Number of records with CloseDate earlier than ListDate: {dateConsistencyIssues}")
 
 # 4. Which countries have the highest median prices?
-if 'CountyOrParish' in sold_df.columns:
-    county_prices = sold_df.groupby('CountyOrParish')['ClosePrice'].median().sort_values(ascending=False)
+if 'CountyOrParish' in soldFiltered.columns:
+    county_prices = soldFiltered.groupby('CountyOrParish')['ClosePrice'].median().sort_values(ascending=False)
     print("\nTop 5 Counties by Median Close Price:")
     print(county_prices.head(5).apply(lambda x: f"${x:,.2f}"))
 
@@ -179,7 +158,7 @@ mortgage_monthly = (
     .mean()
     .reset_index()
 )
-print("Successfully resampled weekly economic interest data points to histroical monthly averages")
+print("Successfully resampled weekly economic interest data points to historical monthly averages")
 
 # Step 3: Create a matching year_month key on the MLS datasets.
 soldFiltered['year_month'] = pd.to_datetime(soldFiltered['CloseDate'], errors='coerce').dt.to_period('M')
@@ -209,8 +188,8 @@ try:
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    # Core fields requested by deliverable guidelines
-    for field in ['ClosePrice', 'LivingArea', 'DaysOnMarket']:
+    # Dynamic loop running across all 9 required numeric fields 
+    for field in availableFields:
         # Generating histogram
         plt.figure(figsize=(8, 4))
         sns.histplot(soldWithRates[field].dropna(), bins=30, kde=True)
@@ -224,6 +203,6 @@ try:
         plt.title(f"Boxplot of {field} - Distribution Boxplot")
         plt.savefig(f"boxplot_{field}.png")
         plt.close()
-    print("Visual plots generated and saved as PNG files.")
+    print(f"Visual plots generated for all {len(availableFields)} fields and saved as PNG files.")
 except ImportError:
     print("Matplotlib or Seaborn not installed. Skipping visual plot generation.")
