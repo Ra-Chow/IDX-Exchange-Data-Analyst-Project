@@ -1,0 +1,128 @@
+import pandas as pd
+import numpy as np
+
+# --------------------------------------------------
+# CODE PREPARATION: LOADING WEEK 6 ENGINEERED DATASETS
+# --------------------------------------------------
+print("=" * 50)
+print("CODE PREPARATION: LOADING WEEK 6 ENGINEERED DATASETS")
+print("=" * 50)
+
+# Load the engineered datasets produced in Week 6
+sold_df = pd.read_csv("week6_sold_engineered.csv", low_memory=False)
+listings_df = pd.read_csv("week6_listings_engineered.csv", low_memory=False)
+
+initial_sold_rows = len(sold_df)
+initial_listings_rows = len(listings_df)
+
+print(f"Sold dataset loaded    : {initial_sold_rows:,} rows x {sold_df.shape[1]} columns")
+print(f"Listings dataset loaded: {initial_listings_rows:,} rows x {listings_df.shape[1]} columns")
+
+# --------------------------------------------------
+# PART 1: INTERQUARTILE RANGE (IQR) OUTLIER FLAGGING
+# --------------------------------------------------
+print("\n" + "=" * 50)
+print("PART 1: INTERQUARTILE RANGE (IQR) OUTLIER FLAGGING")
+print("=" * 50)
+
+# Target fields specified by handbook for IQR analysis
+iqr_target_fields = ['ClosePrice', 'LivingArea', 'DaysOnMarket']
+
+def apply_iqr_outlier_flags(df, name):
+    print(f"\nCalculating IQR Thresholds & Outlier Flags for {name} Dataset:")
+    print("- " * 25)
+    
+    outlier_flag_cols = []
+    
+    for field in iqr_target_fields:
+        if field in df.columns:
+            # Ensure field is numeric
+            series = pd.to_numeric(df[field], errors='coerce')
+            
+            # Calculate 25th percentile (Q1) and 75th percentile (Q3)
+            q1 = series.quantile(0.25)
+            q3 = series.quantile(0.75)
+            iqr = q3 - q1
+            
+            # Calculate lower and upper statistical boundaries
+            lower_bound = q1 - (1.5 * iqr)
+            upper_bound = q3 + (1.5 * iqr)
+            
+            # Create boolean flag column for extreme outliers
+            flag_col = f"{field}_outlier_flag"
+            df[flag_col] = (series < lower_bound) | (series > upper_bound)
+            outlier_flag_cols.append(flag_col)
+            
+            outlier_count = df[flag_col].sum()
+            outlier_pct = (outlier_count / len(df)) * 100
+            
+            print(f"Field: {field:12s} | Q1: {q1:10,.2f} | Q3: {q3:10,.2f} | IQR: {iqr:10,.2f}")
+            print(f"  -> Bounds: [{lower_bound:10,.2f} to {upper_bound:10,.2f}]")
+            print(f"  -> Flagged Outliers: {outlier_count:,} ({outlier_pct:.2f}% of rows)")
+            print("- " * 25)
+
+    # Combined flag if a row trips ANY of the individual IQR outlier checks
+    df['any_outlier_flag'] = df[outlier_flag_cols].any(axis=1)
+    total_outliers = df['any_outlier_flag'].sum()
+    total_pct = (total_outliers / len(df)) * 100
+    print(f"Total Unique Outlier Rows Flagged in {name}: {total_outliers:,} ({total_pct:.2f}%)")
+    
+    return df
+
+sold_flagged = apply_iqr_outlier_flags(sold_df, "Sold")
+listings_flagged = apply_iqr_outlier_flags(listings_df, "Listings")
+
+# --------------------------------------------------
+# PART 2: COMPARATIVE ANALYSIS (BEFORE VS. AFTER FILTERING)
+# --------------------------------------------------
+print("\n" + "=" * 50)
+print("PART 2: COMPARATIVE METRIC ANALYSIS (BEFORE VS. AFTER)")
+print("=" * 50)
+
+# Filter dataset to create clean analysis-ready version (excluding flagged outliers)
+sold_clean = sold_flagged[~sold_flagged['any_outlier_flag']].copy()
+listings_clean = listings_flagged[~listings_flagged['any_outlier_flag']].copy()
+
+def print_impact_comparison(df_before, df_after, name):
+    print(f"\n{name} Dataset Impact Analysis:")
+    print(f"  -> Row Count Before Filtering : {len(df_before):,}")
+    print(f"  -> Row Count After Filtering  : {len(df_after):,}")
+    print(f"  -> Total Outlier Rows Removed : {len(df_before) - len(df_after):,} ({((len(df_before) - len(df_after))/len(df_before))*100:.2f}%)")
+    print("\n  Metric Median & Mean Comparison:")
+    
+    for field in ['ClosePrice', 'LivingArea', 'DaysOnMarket']:
+        if field in df_before.columns:
+            median_before = df_before[field].median()
+            median_after = df_after[field].median()
+            mean_before = df_before[field].mean()
+            mean_after = df_after[field].mean()
+            
+            print(f"    * {field:12s}:")
+            print(f"        Median -> Before: {median_before:12,.2f} | After: {median_after:12,.2f}")
+            print(f"        Mean   -> Before: {mean_before:12,.2f} | After: {mean_after:12,.2f}")
+
+print_impact_comparison(sold_flagged, sold_clean, "Sold")
+print_impact_comparison(listings_flagged, listings_clean, "Listings")
+
+# --------------------------------------------------
+# PART 3: SAVING FLAGGED AND CLEANED DATASETS
+# --------------------------------------------------
+print("\n" + "=" * 50)
+print("PART 3: EXPORTING WEEK 7 DELIVERABLE DATASETS")
+print("=" * 50)
+
+# Save full flagged datasets (retains raw context + flag columns)
+sold_flagged.to_csv("week7_sold_flagged.csv", index=False)
+listings_flagged.to_csv("week7_listings_flagged.csv", index=False)
+
+# Save clean filtered datasets (outliers removed for Tableau)
+sold_clean.to_csv("week7_sold_clean.csv", index=False)
+listings_clean.to_csv("week7_listings_clean.csv", index=False)
+
+print("Successfully saved output files:")
+print("  -> 'week7_sold_flagged.csv'    (Full dataset + outlier flags)")
+print("  -> 'week7_listings_flagged.csv'(Full dataset + outlier flags)")
+print("  -> 'week7_sold_clean.csv'      (Filtered analysis dataset)")
+print("  -> 'week7_listings_clean.csv'  (Filtered analysis dataset)")
+print("\nWeek 7 Outlier Detection Pipeline Complete!")
+```e-o-f
