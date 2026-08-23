@@ -4,6 +4,7 @@ import ssl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 
 # ---------------------------------------------------------------------
 # PART 0: LOAD CLEANED DATASETS FROM WEEK 1 AND SETTING UP WORKSPACE
@@ -37,7 +38,7 @@ else:
 
 def save_csv(df, file_path_str: str, index: bool = True):
   if user_choice == "Y":
-    # Check if the file already exists and remove it before saving the new version to avoid overw
+    # Check if the file already exists and remove it before saving the new version to avoid overwriting.
     target_path = Path(file_path_str)
     # Deletes original file if it exists before saving the new one.
     if target_path.exists():
@@ -116,28 +117,62 @@ def identifyHighMissingColumns(df, name):
 # Calculate and save complete null summary tables to workspace for auditing if needed.
 listingsNullSummary = identifyHighMissingColumns(listings_df, "Listings")
 soldNullSummary = identifyHighMissingColumns(sold_df, "Sold")
-save_csv(listingsNullSummary, save_path / "weeks2-3_listings_null_summary.csv")
-save_csv(soldNullSummary, save_path / "weeks2-3_sold_null_summary.csv")
+save_csv(
+    listingsNullSummary,
+    save_path / "weeks2-3_listings_null_summary.csv",
+    index=True,
+)
+save_csv(
+    soldNullSummary, save_path / "weeks2-3_sold_null_summary.csv", index=True
+)
 
 # Decide which columns to drop vs. retain (keep core fields even if partially missing)
 print("DROPPED VS. RETAINED COLUMNS")
 
-# Define a list of high-missing columns that are too valuable to drop.
-criticalMarketDrivers = ["WaterfrontYN", "BasementYN", "PoolFeatures", "ViewYN"]
+# Define a list of core analytical and downstream dashboard fields that are protected from dropping.
+coreAnalysisFields = [
+    "ClosePrice",
+    "ListPrice",
+    "OriginalListPrice",
+    "LivingArea",
+    "LotSizeAcres",
+    "BedroomsTotal",
+    "BathroomsTotalInteger",
+    "DaysOnMarket",
+    "YearBuilt",
+    "City",
+    "CountyOrParish",
+    "ZipCode",
+    "PropertyType",
+    "PropertySubType",
+    "ListOfficeName",
+    "BuyerOfficeName",
+    "ListAgentKey",
+    "ListAgentFullName",
+    "BuyerAgentKey",
+    "BuyerAgentFullName",
+    "MLSAreaMajor",
+    "CloseDate",
+    "ListingContractDate",
+    "PurchaseContractDate",
+    "ContractStatusChangeDate",
+    "Latitude",
+    "Longitude",
+]
 
 # Evaluate drop targets independently for listings vs sold datasets to prevent premature data loss
 listingsHighMissing = listingsNullSummary[
     listingsNullSummary["Null Percentage"] > 90.0
 ].index.tolist()
 listingsDropTargets = [
-    col for col in listingsHighMissing if col not in criticalMarketDrivers
+    col for col in listingsHighMissing if col not in coreAnalysisFields
 ]
 
 highMissingColumnNames = soldNullSummary[
     soldNullSummary["Null Percentage"] > 90.0
 ].index.tolist()
 soldDropTargets = [
-    col for col in highMissingColumnNames if col not in criticalMarketDrivers
+    col for col in highMissingColumnNames if col not in coreAnalysisFields
 ]
 
 # Print the lists of columns to drop for auditing purposes.
@@ -145,11 +180,19 @@ print(f"Listings Columns to Drop: {listingsDropTargets}")
 print(f"Sold Columns to Drop: {soldDropTargets}")
 
 # Apply drops safely to their respective datasets
-listingsFiltered = listings_df.drop(
-    columns=[col for col in listingsDropTargets if col in listings_df.columns]
+listingsFiltered = (
+    listings_df.drop(
+        columns=[
+            col for col in listingsDropTargets if col in listings_df.columns
+        ]
+    )
+    .copy()
 )
-soldFiltered = sold_df.drop(
-    columns=[col for col in soldDropTargets if col in sold_df.columns]
+soldFiltered = (
+    sold_df.drop(
+        columns=[col for col in soldDropTargets if col in sold_df.columns]
+    )
+    .copy()
 )
 
 # Save the primary structural filtered datasets as new baseline CSV files.
@@ -166,10 +209,10 @@ print(
 print("Property Type Analysis (Deliverable Documentation)")
 uniquePropertyTypes = [
     "Residential",
-    "Commerical",
+    "Commercial",
     "Land",
     "Multi-Family",
-    "Industial",
+    "Industrial",
 ]
 print(f"Unique Property Types in Raw Data: {uniquePropertyTypes}")
 print("Filtering logic: sold = sold[sold['PropertyType'] == 'Residential']")
@@ -209,13 +252,34 @@ print(distributionSummary.round(2).to_string())
 # --------------------------------------------------
 print("SUGGESTED INTERN QUESTIONS (EDA ANSWERS)")
 
-# 1. What are the median and average close prices calculated from the clean baseline?
+# 1. What is the Residential vs. other property type share?
+if (
+    "PropertyType" in soldFiltered.columns
+    and (soldFiltered["PropertyType"] == "Residential").all()
+):
+  print(
+      "Residential vs. Other Property Type Share: Dataset successfully filtered"
+      " to 100.00% Residential"
+  )
+
+# 2. What are the median and average close prices calculated from the clean baseline?
 avgClosePrice = soldFiltered["ClosePrice"].mean()
 medianClosePrice = soldFiltered["ClosePrice"].median()
 print(f"Average Close Price: ${avgClosePrice:,.2f}")
 print(f"Median Close Price: ${medianClosePrice:,.2f}")
 
-# 2. What percentage of homes sold above vs. below list price?
+# 3. What does the Days on Market distribution look like?
+domMean = soldFiltered["DaysOnMarket"].mean()
+domMedian = soldFiltered["DaysOnMarket"].median()
+domQ25 = soldFiltered["DaysOnMarket"].quantile(0.25)
+domQ75 = soldFiltered["DaysOnMarket"].quantile(0.75)
+print(
+    f"Days on Market Distribution Summary - Mean: {domMean:.2f}, Median:"
+    f" {domMedian:.2f}, 25th Percentile: {domQ25:.2f}, 75th Percentile:"
+    f" {domQ75:.2f}"
+)
+
+# 4. What percentage of homes sold above vs. below list price?
 validPrices = soldFiltered[
     (soldFiltered["ListPrice"] > 0) & (soldFiltered["ClosePrice"] > 0)
 ]
@@ -238,7 +302,7 @@ print(f"Homes Sold Above List Price: {soldAbove:.2f}%")
 print(f"Homes Sold Below List Price: {soldBelow:.2f}%")
 print(f"Homes Sold Exactly At List Price: {soldAtList:.2f}%")
 
-# 3. Are there any apparent date consistency issues?
+# 5. Are there any apparent date consistency issues?
 closeDates = pd.to_datetime(soldFiltered["CloseDate"], errors="coerce")
 listDates = pd.to_datetime(soldFiltered["ListingContractDate"], errors="coerce")
 dateConsistencyIssues = (closeDates < listDates).sum()
@@ -247,7 +311,7 @@ print(
     f" {dateConsistencyIssues}"
 )
 
-# 4. Which countries have the highest median prices?
+# 6. Which counties have the highest median prices?
 if "CountyOrParish" in soldFiltered.columns:
   county_prices = (
       soldFiltered.groupby("CountyOrParish")["ClosePrice"]
@@ -323,29 +387,23 @@ print("VISUAL PLOTS")
 chart_save_path = save_path / "charts"
 chart_save_path.mkdir(parents=True, exist_ok=True)
 
-try:
-  import matplotlib.pyplot as plt
-  import seaborn as sns
+# Dynamic loop running across all 9 required numeric fields
+for field in availableFields:
+  # Generating histogram
+  fig1 = plt.figure(figsize=(8, 4))
+  sns.histplot(soldWithRates[field].dropna(), bins=30, kde=True)
+  plt.title(f"Histogram of {field} - Distribution Histogram")
+  save_plot(fig1, chart_save_path / f"weeks2-3_histogram_{field}.png")
+  plt.close(fig1)
 
-  # Dynamic loop running across all 9 required numeric fields
-  for field in availableFields:
-    # Generating histogram
-    fig1 = plt.figure(figsize=(8, 4))
-    sns.histplot(soldWithRates[field].dropna(), bins=30, kde=True)
-    plt.title(f"Histogram of {field} - Distribution Histogram")
-    save_plot(fig1, chart_save_path / f"weeks2-3_histogram_{field}.png")
-    plt.close(fig1)
+  # Generating boxplot
+  fig2 = plt.figure(figsize=(8, 2))
+  sns.boxplot(x=soldWithRates[field].dropna())
+  plt.title(f"Boxplot of {field} - Distribution Boxplot")
+  save_plot(fig2, chart_save_path / f"weeks2-3_boxplot_{field}.png")
+  plt.close(fig2)
 
-    # Generating boxplot
-    fig2 = plt.figure(figsize=(8, 2))
-    sns.boxplot(x=soldWithRates[field].dropna())
-    plt.title(f"Boxplot of {field} - Distribution Boxplot")
-    save_plot(fig2, chart_save_path / f"weeks2-3_boxplot_{field}.png")
-    plt.close(fig2)
-
-  print(
-      f"Visual plots generated for all {len(availableFields)} fields and saved"
-      " as PNG files."
-  )
-except ImportError:
-  print("Matplotlib or Seaborn not installed. Skipping visual plot generation.")
+print(
+    f"Visual plots generated for all {len(availableFields)} fields and saved as"
+    " PNG files."
+)
